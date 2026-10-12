@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex"><title>Administrar catálogo</title>
+<style>
+:root{--ink:#1F3F66;--blue:#2D6AA8;--sun:#FFC843;--bg:#F8FBFF;--line:#DCE9F6;--mut:#6B7F97}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,sans-serif;background:var(--bg);color:var(--ink);padding:16px;max-width:900px;margin:auto}
+h1{color:var(--blue);font-size:24px}input,button{font:inherit}
+input[type=text],input[type=password],input[type=search],input[type=number]{width:100%;padding:10px;border:2px solid var(--line);border-radius:10px;margin:4px 0 10px}
+button{border:0;border-radius:10px;padding:10px 14px;background:var(--blue);color:#fff;font-weight:700;cursor:pointer}
+button.s{background:var(--sun);color:var(--ink)}.box{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+#st{position:sticky;top:0;background:var(--ink);color:#fff;padding:8px 12px;border-radius:10px;margin-bottom:10px;display:none;z-index:3}
+.it{display:grid;grid-template-columns:1fr;gap:8px}.hd{display:flex;justify-content:space-between;gap:8px;font-weight:700}
+.th{display:flex;gap:8px;flex-wrap:wrap}.th div{position:relative}.th img{width:84px;height:84px;object-fit:cover;border-radius:10px;border:3px solid var(--line)}
+.th div:first-child img{border-color:var(--sun)}
+.th button{position:absolute;top:-6px;right:-6px;width:24px;height:24px;padding:0;border-radius:50%;background:#d33}
+.th .st2{right:auto;left:-6px;background:var(--ink)}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.row input[type=number]{width:110px;margin:0}
+small{color:var(--mut)}
+</style></head><body>
+<h1>Administrar catálogo</h1>
+<div id="login" class="box"><b>Conectar con GitHub</b><br><small>El token se guarda solo en este navegador.</small>
+<input type="text" id="repo" placeholder="usuario/repositorio (ej: armando/catalogo-ropa)">
+<input type="password" id="tok" placeholder="Token de GitHub">
+<button id="enter">Entrar</button></div>
+<div id="app" hidden>
+<div id="st"></div>
+<div class="box"><div class="row"><label>WhatsApp (con código de país)<input type="text" id="wa"></label><button id="sw" class="s">Guardar número</button></div></div>
+<input type="search" id="q" placeholder="Buscar prenda o número…">
+<div id="list"></div><p><button id="out" class="s">Salir</button></p></div>
+<script>
+const $=id=>document.getElementById(id);let repo,tok,sha,CFG,chain=Promise.resolve();
+const api=p=>`https://api.github.com/repos/${repo}/contents/${p}`;
+const H=()=>({Authorization:"Bearer "+tok,Accept:"application/vnd.github+json"});
+const msg=(t,ok=true)=>{const s=$("st");s.style.display="block";s.textContent=t;s.style.background=ok?"#1F3F66":"#c0392b";if(ok&&/Guardado/.test(t))setTimeout(()=>s.style.display="none",2500)};
+async function load(){const r=await fetch(api("catalogo.json"),{headers:H()});if(!r.ok)throw new Error("No se pudo entrar. Revisa repositorio y token.");
+ const j=await r.json();sha=j.sha;CFG=JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g,"")))));}
+const doSave=async()=>{msg("Guardando…");const body={message:"Actualizar catálogo",sha,content:btoa(unescape(encodeURIComponent(JSON.stringify(CFG,null,1))))};
+ const r=await fetch(api("catalogo.json"),{method:"PUT",headers:H(),body:JSON.stringify(body)});
+ if(!r.ok){msg("Error al guardar ("+r.status+")",false);return}sha=(await r.json()).content.sha;msg("Guardado. Se verá en la tienda en 1-2 minutos.")};
+const save=()=>chain=chain.then(doSave).catch(e=>msg(e.message,false));
+function shrink(file){return new Promise(res=>{const im=new Image();im.onload=()=>{const k=Math.min(1,1100/Math.max(im.width,im.height)),c=document.createElement("canvas");
+ c.width=im.width*k;c.height=im.height*k;c.getContext("2d").drawImage(im,0,0,c.width,c.height);res(c.toDataURL("image/jpeg",.8).split(",")[1])};im.src=URL.createObjectURL(file)})}
+async function upload(id,files){const it=CFG.items.find(x=>x.id==id);let n=0;
+ for(const f of files){msg(`Subiendo foto ${++n} de ${files.length}…`);const path=`fotos/${id}-${Date.now()}-${n}.jpg`;
+  const r=await fetch(api(path),{method:"PUT",headers:H(),body:JSON.stringify({message:"Foto "+id,content:await shrink(f)})});
+  if(!r.ok){msg("Error al subir foto ("+r.status+")",false);return}it.f.push(path)}
+ await save();draw()}
+function draw(){const q=$("q").value.toLowerCase();
+ $("list").innerHTML=CFG.items.filter(d=>!q||(d.n+" "+d.id).toLowerCase().includes(q)).map(d=>`<div class="box it" data-id="${d.id}">
+ <div class="hd"><span>N° ${d.id} · ${d.n} ${d.t?"("+d.t+")":""}</span></div>
+ <div class="th">${d.f.map((u,i)=>`<div><img src="${u}"><button data-a="del" data-i="${i}">×</button>${i?`<button class="st2" data-a="main" data-i="${i}">★</button>`:""}</div>`).join("")}</div>
+ <div class="row"><input type="file" accept="image/*" multiple data-a="up"><label>Bs <input type="number" value="${d.p}" data-a="price"></label>
+ <label><input type="checkbox" data-a="sold" ${d.v?"checked":""}> Vendido</label></div></div>`).join("")}
+$("list").onclick=e=>{const b=e.target.closest("button");if(!b)return;const id=+b.closest(".it").dataset.id,it=CFG.items.find(x=>x.id==id),i=+b.dataset.i;
+ if(b.dataset.a=="del"){it.f.splice(i,1);save();draw()}if(b.dataset.a=="main"){it.f.unshift(...it.f.splice(i,1));save();draw()}};
+$("list").onchange=e=>{const t=e.target,a=t.dataset.a,id=+t.closest(".it").dataset.id,it=CFG.items.find(x=>x.id==id);
+ if(a=="up"&&t.files.length)upload(id,[...t.files]);if(a=="price"){it.p=+t.value;save()}if(a=="sold"){it.v=t.checked;save()}};
+$("q").oninput=draw;
+$("sw").onclick=()=>{CFG.whatsapp=$("wa").value.replace(/\D/g,"");save()};
+async function enter(){try{await load();$("login").hidden=true;$("app").hidden=false;$("wa").value=CFG.whatsapp;draw()}catch(e){msg(e.message,false);$("login").hidden=false}}
+$("enter").onclick=()=>{repo=$("repo").value.trim();tok=$("tok").value.trim();localStorage.setItem("rk",JSON.stringify({repo,tok}));enter()};
+$("out").onclick=()=>{localStorage.removeItem("rk");location.reload()};
+try{const s=JSON.parse(localStorage.getItem("rk")||"null");if(s){repo=s.repo;tok=s.tok;enter()}}catch(e){}
+</script></body></html>
