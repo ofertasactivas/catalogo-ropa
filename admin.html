@@ -15,23 +15,29 @@ button.s{background:var(--sun);color:var(--ink)}.box{background:#fff;border:1px 
 .th button{position:absolute;top:-6px;right:-6px;width:24px;height:24px;padding:0;border-radius:50%;background:#d33}
 .th .st2{right:auto;left:-6px;background:var(--ink)}.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.row input[type=number]{width:110px;margin:0}
 small{color:var(--mut)}
+.nm{display:flex;gap:8px;align-items:center}.nm input{margin:0}.nm .z{width:96px;flex:none}
+.it.vend{background:#EEF3F9}.it.vend .th img{opacity:.55}
+#sum{display:flex;gap:16px;flex-wrap:wrap;justify-content:space-between}#sum b{font-size:20px;display:block}
+select{font:inherit;padding:9px;border:2px solid var(--line);border-radius:10px;margin-bottom:10px;background:#fff}
 </style></head><body>
 <h1>Administrar catálogo</h1>
 <div id="login" class="box"><b>Conectar con GitHub</b><br><small>El token se guarda solo en este navegador.</small>
 <input type="text" id="repo" placeholder="usuario/repositorio (ej: armando/catalogo-ropa)">
 <input type="password" id="tok" placeholder="Token de GitHub">
 <button id="enter">Entrar</button></div>
-<div id="app" hidden>
 <div id="st"></div>
+<div id="app" hidden>
 <div class="box"><div class="row"><label>WhatsApp (con código de país)<input type="text" id="wa"></label><button id="sw" class="s">Guardar número</button></div></div>
+<div class="box" id="sum"></div>
 <input type="search" id="q" placeholder="Buscar prenda o número…">
+<select id="flt"><option value="">Todas</option><option value="d">Solo disponibles</option><option value="v">Solo vendidas</option></select>
 <div id="list"></div><p><button id="out" class="s">Salir</button></p></div>
 <script>
 const $=id=>document.getElementById(id);let repo,tok,sha,CFG,chain=Promise.resolve();
 const api=p=>`https://api.github.com/repos/${repo}/contents/${p}`;
 const H=()=>({Authorization:"Bearer "+tok,Accept:"application/vnd.github+json"});
 const msg=(t,ok=true)=>{const s=$("st");s.style.display="block";s.textContent=t;s.style.background=ok?"#1F3F66":"#c0392b";if(ok&&/Guardado/.test(t))setTimeout(()=>s.style.display="none",2500)};
-async function load(){const r=await fetch(api("catalogo.json"),{headers:H()});if(!r.ok)throw new Error("No se pudo entrar. Revisa repositorio y token.");
+async function load(){const r=await fetch(api("catalogo.json"),{headers:H()});if(!r.ok)throw new Error("No se pudo entrar (error "+r.status+"). 404 = nombre del repositorio incorrecto; 401 = token mal copiado.");
  const j=await r.json();sha=j.sha;CFG=JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g,"")))));}
 const doSave=async()=>{msg("Guardando…");const body={message:"Actualizar catálogo",sha,content:btoa(unescape(encodeURIComponent(JSON.stringify(CFG,null,1))))};
  const r=await fetch(api("catalogo.json"),{method:"PUT",headers:H(),body:JSON.stringify(body)});
@@ -44,20 +50,26 @@ async function upload(id,files){const it=CFG.items.find(x=>x.id==id);let n=0;
   const r=await fetch(api(path),{method:"PUT",headers:H(),body:JSON.stringify({message:"Foto "+id,content:await shrink(f)})});
   if(!r.ok){msg("Error al subir foto ("+r.status+")",false);return}it.f.push(path)}
  await save();draw()}
-function draw(){const q=$("q").value.toLowerCase();
- $("list").innerHTML=CFG.items.filter(d=>!q||(d.n+" "+d.id).toLowerCase().includes(q)).map(d=>`<div class="box it" data-id="${d.id}">
- <div class="hd"><span>N° ${d.id} · ${d.n} ${d.t?"("+d.t+")":""}</span></div>
+const esc=x=>String(x||"").replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
+const bs=n=>"Bs "+n.toLocaleString("es-BO");
+function summary(){const v=CFG.items.filter(d=>d.v),a=CFG.items.filter(d=>!d.v),t=l=>l.reduce((x,d)=>x+d.p,0);
+ $("sum").innerHTML=`<div><small>Vendidas</small><b>${v.length} · ${bs(t(v))}</b></div><div><small>Disponibles</small><b>${a.length} · ${bs(t(a))}</b></div>`}
+function draw(){const q=$("q").value.toLowerCase(),f=$("flt").value;summary();
+ $("list").innerHTML=CFG.items.filter(d=>(!q||(d.n+" "+d.id).toLowerCase().includes(q))&&(!f||(f=="v")==!!d.v)).map(d=>`<div class="box it${d.v?" vend":""}" data-id="${d.id}">
+ <div class="nm"><b>N° ${d.id}</b><input type="text" value="${esc(d.n)}" data-a="name" aria-label="Nombre"><input class="z" type="text" value="${esc(d.t)}" placeholder="Talla" data-a="size" aria-label="Talla"></div>
  <div class="th">${d.f.map((u,i)=>`<div><img src="${u}"><button data-a="del" data-i="${i}">×</button>${i?`<button class="st2" data-a="main" data-i="${i}">★</button>`:""}</div>`).join("")}</div>
  <div class="row"><input type="file" accept="image/*" multiple data-a="up"><label>Bs <input type="number" value="${d.p}" data-a="price"></label>
- <label><input type="checkbox" data-a="sold" ${d.v?"checked":""}> Vendido</label></div></div>`).join("")}
+ <label><input type="checkbox" data-a="sold" ${d.v?"checked":""}> Vendido</label>${d.v&&d.vf?`<small>Vendida el ${d.vf}</small>`:""}</div></div>`).join("")}
 $("list").onclick=e=>{const b=e.target.closest("button");if(!b)return;const id=+b.closest(".it").dataset.id,it=CFG.items.find(x=>x.id==id),i=+b.dataset.i;
  if(b.dataset.a=="del"){it.f.splice(i,1);save();draw()}if(b.dataset.a=="main"){it.f.unshift(...it.f.splice(i,1));save();draw()}};
 $("list").onchange=e=>{const t=e.target,a=t.dataset.a,id=+t.closest(".it").dataset.id,it=CFG.items.find(x=>x.id==id);
- if(a=="up"&&t.files.length)upload(id,[...t.files]);if(a=="price"){it.p=+t.value;save()}if(a=="sold"){it.v=t.checked;save()}};
-$("q").oninput=draw;
+ if(a=="up"&&t.files.length)upload(id,[...t.files]);if(a=="name"){it.n=t.value.trim()||it.n;save()}if(a=="size"){it.t=t.value.trim();save()}
+ if(a=="price"){it.p=+t.value;save();summary()}
+ if(a=="sold"){it.v=t.checked;if(t.checked)it.vf=new Date().toISOString().slice(0,10);else delete it.vf;save();draw()}};
+$("q").oninput=draw;$("flt").onchange=draw;
 $("sw").onclick=()=>{CFG.whatsapp=$("wa").value.replace(/\D/g,"");save()};
 async function enter(){try{await load();$("login").hidden=true;$("app").hidden=false;$("wa").value=CFG.whatsapp;draw()}catch(e){msg(e.message,false);$("login").hidden=false}}
-$("enter").onclick=()=>{repo=$("repo").value.trim();tok=$("tok").value.trim();localStorage.setItem("rk",JSON.stringify({repo,tok}));enter()};
+$("enter").onclick=()=>{repo=$("repo").value.trim().replace(/^\/+|\/+$/g,"");tok=$("tok").value.trim();localStorage.setItem("rk",JSON.stringify({repo,tok}));enter()};
 $("out").onclick=()=>{localStorage.removeItem("rk");location.reload()};
 try{const s=JSON.parse(localStorage.getItem("rk")||"null");if(s){repo=s.repo;tok=s.tok;enter()}}catch(e){}
 </script></body></html>
