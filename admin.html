@@ -35,6 +35,12 @@ select{font:inherit;padding:9px;border:2px solid var(--line);border-radius:10px;
 <div id="tabC">
 <div class="box"><div class="row"><label>WhatsApp (con código de país)<input type="text" id="wa"></label><button id="sw" class="s">Guardar número</button></div></div>
 <div class="box" id="sum"></div>
+<details class="box"><summary><b>+ Agregar prenda nueva</b></summary>
+<input type="text" id="nn" placeholder="Nombre (ej: Vestido rosado mariposa)">
+<div class="row"><input type="text" id="nt" placeholder="Talla (ej: T6, 2 años)" style="flex:1;margin:0 0 10px"><input type="number" id="np" placeholder="Precio Bs" inputmode="numeric" style="width:120px;margin:0 0 10px"></div>
+<label><small>Categoría</small><br><select id="nc"></select></label>
+<input type="file" id="nf" accept="image/*" multiple>
+<button id="addb" class="s big">Agregar al catálogo</button></details>
 <input type="search" id="q" placeholder="Buscar prenda o número…">
 <select id="flt"><option value="">Todas</option><option value="d">Solo disponibles</option><option value="v">Solo vendidas</option></select>
 <div id="list"></div></div>
@@ -85,9 +91,15 @@ $("list").onchange=e=>{const t=e.target,a=t.dataset.a,id=+t.closest(".it").datas
  if(a=="up"&&t.files.length)upload(id,[...t.files]);if(a=="name"){it.n=t.value.trim()||it.n;save()}if(a=="size"){it.t=t.value.trim();save()}
  if(a=="price"){it.p=+t.value;save();summary()}
  if(a=="sold"){it.v=t.checked;if(t.checked)it.vf=new Date().toISOString().slice(0,10);else delete it.vf;save();draw()}};
+function catOpts(){$("nc").innerHTML=[...new Set(CFG.items.map(d=>d.c))].map(c=>`<option>${esc(c)}</option>`).join("")}
+$("addb").onclick=async()=>{const n=$("nn").value.trim(),p=+$("np").value;if(!n||!(p>0)){msg("Escribe el nombre y el precio.",false);return}
+ const id=Math.max(0,...CFG.items.map(d=>d.id))+1,files=[...$("nf").files];
+ CFG.items.push({id,n,t:$("nt").value.trim(),p,c:$("nc").value,k:"#E4DCF2",v:false,f:[]});
+ $("nn").value="";$("nt").value="";$("np").value="";$("nf").value="";$("q").value=String(id);
+ if(files.length)await upload(id,files);else{await save();draw()}};
 $("q").oninput=draw;$("flt").onchange=draw;
 $("sw").onclick=()=>{CFG.whatsapp=$("wa").value.replace(/\D/g,"");save()};
-async function enter(){try{await load();$("login").hidden=true;$("app").hidden=false;$("wa").value=CFG.whatsapp;draw()}catch(e){msg(e.message,false);$("login").hidden=false}}
+async function enter(){try{await load();$("login").hidden=true;$("app").hidden=false;$("wa").value=CFG.whatsapp;draw();catOpts()}catch(e){msg(e.message,false);$("login").hidden=false}}
 $("enter").onclick=()=>{repo=$("repo").value.trim().replace(/^\/+|\/+$/g,"");tok=$("tok").value.trim();localStorage.setItem("rk",JSON.stringify({repo,tok}));enter()};
 $("out").onclick=()=>{localStorage.removeItem("rk");location.reload()};
 try{const s=JSON.parse(localStorage.getItem("rk")||"null");if(s){repo=s.repo;tok=s.tok;enter()}}catch(e){}
