@@ -19,7 +19,11 @@ small{color:var(--mut)}
 .it.vend{background:#EEF3F9}.it.vend .th img{opacity:.55}
 #sum{display:flex;gap:16px;flex-wrap:wrap;justify-content:space-between}#sum b{font-size:20px;display:block}
 select{font:inherit;padding:9px;border:2px solid var(--line);border-radius:10px;margin-bottom:10px;background:#fff}
-</style></head><body>
+.tabs{display:flex;gap:8px;margin-bottom:12px}.tabs button{flex:1;background:#fff;color:var(--ink);border:2px solid var(--line)}.tabs button.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+.ord{border-left:6px solid var(--sun)}.ord .btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.ord .btns button{flex:1;min-width:120px}
+.ord .g{background:#1FA855}.ord .x{background:#fff;color:#c0392b;border:2px solid #f0c9c4}.big{font-size:18px}
+.ls{display:flex;gap:10px;flex-wrap:wrap}.ls button{flex:1}
+</style><script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script></head><body>
 <h1>Administrar catálogo</h1>
 <div id="login" class="box"><b>Conectar con GitHub</b><br><small>El token se guarda solo en este navegador.</small>
 <input type="text" id="repo" placeholder="usuario/repositorio (ej: armando/catalogo-ropa)">
@@ -27,11 +31,24 @@ select{font:inherit;padding:9px;border:2px solid var(--line);border-radius:10px;
 <button id="enter">Entrar</button></div>
 <div id="st"></div>
 <div id="app" hidden>
+<div class="tabs"><button id="tc" class="on">Catálogo</button><button id="tl">Modo Live</button></div>
+<div id="tabC">
 <div class="box"><div class="row"><label>WhatsApp (con código de país)<input type="text" id="wa"></label><button id="sw" class="s">Guardar número</button></div></div>
 <div class="box" id="sum"></div>
 <input type="search" id="q" placeholder="Buscar prenda o número…">
 <select id="flt"><option value="">Todas</option><option value="d">Solo disponibles</option><option value="v">Solo vendidas</option></select>
-<div id="list"></div><p><button id="out" class="s">Salir</button></p></div>
+<div id="list"></div></div>
+<div id="tabL" hidden>
+<div class="box"><b>Nuevo pedido</b><br><small>Escribe el nombre y los números de prenda en una sola línea. Ejemplo: <i>María 12 45 60</i></small>
+<input type="text" id="lo" placeholder="María 12 45 60" autocomplete="off" enterkeyhint="done">
+<input type="text" id="lp" placeholder="WhatsApp del cliente (opcional)" inputmode="tel">
+<div class="row"><label>QR para el cliente <select id="lq"><option value="t">Tienda</option><option value="w">Mi WhatsApp</option></select></label></div>
+<button id="lmk" class="s big">Crear pedido</button></div>
+<div class="box" id="ltot"></div>
+<div id="olist"></div>
+<div class="ls"><button id="lcp" class="s">Copiar resumen</button><button id="lcsv" class="s">Descargar CSV</button><button id="lend" class="x" style="background:#fff;color:#c0392b;border:2px solid #f0c9c4">Cerrar live</button></div>
+</div>
+<p><button id="out" class="s">Salir</button></p></div>
 <script>
 const $=id=>document.getElementById(id);let repo,tok,sha,CFG,chain=Promise.resolve();
 const api=p=>`https://api.github.com/repos/${repo}/contents/${p}`;
@@ -72,4 +89,57 @@ async function enter(){try{await load();$("login").hidden=true;$("app").hidden=f
 $("enter").onclick=()=>{repo=$("repo").value.trim().replace(/^\/+|\/+$/g,"");tok=$("tok").value.trim();localStorage.setItem("rk",JSON.stringify({repo,tok}));enter()};
 $("out").onclick=()=>{localStorage.removeItem("rk");location.reload()};
 try{const s=JSON.parse(localStorage.getItem("rk")||"null");if(s){repo=s.repo;tok=s.tok;enter()}}catch(e){}
+
+/* ===== MODO LIVE ===== */
+const LS="rk_orders";let ORD=[];try{ORD=JSON.parse(localStorage.getItem(LS)||"[]")}catch(e){}
+const saveOrd=()=>{try{localStorage.setItem(LS,JSON.stringify(ORD))}catch(e){}};
+const shopURL=()=>location.href.replace(/[?#].*$/,"").replace(/[^/]*$/,"");
+const phoneOf=v=>{v=String(v||"").replace(/\D/g,"");return v.length==8?"591"+v:v};
+function tab(w){$("tabC").hidden=w!="c";$("tabL").hidden=w!="l";$("tc").classList.toggle("on",w=="c");$("tl").classList.toggle("on",w=="l");if(w=="l")liveDraw()}
+$("tc").onclick=()=>tab("c");$("tl").onclick=()=>tab("l");
+const itxt=i=>`• N° ${i.id} – ${i.n}${i.t?" ("+i.t+")":""} – Bs ${i.p}`;
+const otxt=o=>`¡Hola ${o.name}! Gracias por tu compra en La Recolecta Kids 🧸\n\nTu pedido:\n`+o.items.map(itxt).join("\n")+`\n\nTotal: Bs ${o.total}\n\nMás prendas: ${shopURL()}`;
+function mkOrder(){const raw=$("lo").value.trim();if(!raw)return;
+ const nums=[...new Set((raw.match(/\d+/g)||[]).map(Number))],name=raw.replace(/\d+/g," ").replace(/[,;]/g," ").replace(/\s+/g," ").trim()||"Cliente";
+ const ok=[],bad=[];nums.forEach(n=>{const it=CFG.items.find(x=>x.id==n);(!it||it.v)?bad.push(n):ok.push(it)});
+ if(!ok.length){msg("Ninguna disponible"+(bad.length?" ("+bad.join(", ")+" ya vendidas o no existen)":"")+". Escribe el nombre y los números.",false);return}
+ const today=new Date().toISOString().slice(0,10);
+ const o={id:Date.now(),name,phone:phoneOf($("lp").value),q:$("lq").value,items:ok.map(i=>({id:i.id,n:i.n,t:i.t,p:i.p})),total:ok.reduce((a,i)=>a+i.p,0)};
+ ORD.unshift(o);saveOrd();ok.forEach(it=>{it.v=true;it.vf=today});save();draw();
+ $("lo").value="";$("lp").value="";liveDraw();if(bad.length)msg("Ya vendidas o inexistentes (no incluidas): "+bad.join(", "),false);$("lo").focus()}
+function liveDraw(){const t=ORD.reduce((a,o)=>a+o.total,0),n=ORD.reduce((a,o)=>a+o.items.length,0);
+ $("ltot").innerHTML=`<div id="sum"><div><small>Pedidos</small><b>${ORD.length}</b></div><div><small>Prendas</small><b>${n}</b></div><div><small>Total del live</small><b>${bs(t)}</b></div></div>`;
+ $("olist").innerHTML=ORD.map((o,i)=>`<div class="box ord"><b class="big">${esc(o.name)} · ${bs(o.total)}</b><br><small>${o.items.map(x=>"N° "+x.id).join(", ")}</small>
+ <div class="btns"><button class="g" data-a="img" data-i="${i}">Enviar imagen con QR</button><button data-a="txt" data-i="${i}">Enviar texto</button><button class="x" data-a="undo" data-i="${i}" style="background:#fff;color:#c0392b;border:2px solid #f0c9c4">Deshacer</button></div></div>`).join("")}
+const loadImg=u=>new Promise((r,j)=>{const m=new Image();m.onload=()=>r(m);m.onerror=j;m.src=u});
+async function card(o){const rows=o.items.length,H=560+rows*54+380,c=document.createElement("canvas");c.width=1080;c.height=H;const x=c.getContext("2d");
+ x.fillStyle="#F8FBFF";x.fillRect(0,0,1080,H);x.fillStyle="#fff";x.fillRect(0,0,1080,250);x.fillStyle="#FFC843";x.fillRect(0,250,1080,12);
+ try{const l=await loadImg("logo.jpg");x.save();x.beginPath();x.arc(140,125,95,0,7);x.clip();x.drawImage(l,45,30,190,190);x.restore()}catch(e){}
+ x.fillStyle="#2D6AA8";x.font="700 56px system-ui,sans-serif";x.fillText("¡Gracias, "+o.name+"!",270,115);
+ x.fillStyle="#F77EB0";x.font="700 38px system-ui,sans-serif";x.fillText("La Recolecta Kids",270,175);
+ x.fillStyle="#1F3F66";x.font="700 40px system-ui,sans-serif";x.fillText("Tu pedido",50,340);
+ o.items.forEach((it,k)=>{const y=370+k*54;if(k%2==0){x.fillStyle="#EAF3FC";x.fillRect(30,y,1020,50)}
+  x.fillStyle="#2D6AA8";x.font="700 30px system-ui,sans-serif";x.fillText("N° "+it.id,50,y+36);
+  x.fillStyle="#1F3F66";x.font="600 28px system-ui,sans-serif";let t=it.n+(it.t?" ("+it.t+")":"");while(x.measureText(t).width>600&&t.length>8)t=t.slice(0,-2);x.fillText(t,170,y+36);
+  x.fillStyle="#2D6AA8";x.font="700 32px system-ui,sans-serif";const s="Bs "+it.p;x.fillText(s,1030-x.measureText(s).width,y+36)});
+ const ty=370+rows*54+30;x.fillStyle="#1F3F66";x.fillRect(30,ty,1020,90);x.fillStyle="#fff";x.font="700 48px system-ui,sans-serif";x.fillText("TOTAL",60,ty+62);
+ const tt="Bs "+o.total;x.fillText(tt,1020-x.measureText(tt).width,ty+62);
+ const data=o.q=="w"?"https://wa.me/"+CFG.whatsapp:shopURL(),q=qrcode(0,"M");q.addData(data);q.make();const n=q.getModuleCount(),cell=Math.floor(320/n),sz=cell*n,qy=ty+150;
+ x.fillStyle="#fff";x.fillRect(50,qy,sz+60,sz+60);x.strokeStyle="#7CC3F0";x.lineWidth=5;x.strokeRect(50,qy,sz+60,sz+60);x.fillStyle="#1F3F66";
+ for(let r=0;r<n;r++)for(let k=0;k<n;k++)if(q.isDark(r,k))x.fillRect(80+k*cell,qy+30+r*cell,cell,cell);
+ x.fillStyle="#2D6AA8";x.font="700 40px system-ui,sans-serif";x.fillText(o.q=="w"?"Escríbenos por WhatsApp":"Mira más prendas",sz+150,qy+90);
+ x.fillStyle="#1F3F66";x.font="600 30px system-ui,sans-serif";x.fillText("Escanea el QR con tu celular",sz+150,qy+140);x.fillText("¡Gracias por tu compra! 🧸",sz+150,qy+190);
+ return new Promise(r=>c.toBlob(r,"image/png"))}
+$("lmk").onclick=mkOrder;$("lo").onkeydown=e=>{if(e.key=="Enter")mkOrder()};
+$("olist").onclick=async e=>{const b=e.target.closest("button");if(!b)return;const i=+b.dataset.i,o=ORD[i],a=b.dataset.a;
+ const wa=()=>"https://wa.me/"+(o.phone||"")+"?text="+encodeURIComponent(otxt(o));
+ if(a=="txt")window.open(wa(),"_blank");
+ if(a=="img"){const blob=await card(o),f=new File([blob],"pedido-"+o.name+".png",{type:"image/png"});
+  if(navigator.canShare&&navigator.canShare({files:[f]})){try{await navigator.share({files:[f],text:otxt(o)})}catch(err){}}
+  else{const u=URL.createObjectURL(blob),l=document.createElement("a");l.href=u;l.download=f.name;l.click();window.open(wa(),"_blank")}}
+ if(a=="undo"&&confirm("¿Deshacer el pedido de "+o.name+"? Sus prendas vuelven a estar disponibles.")){o.items.forEach(x=>{const it=CFG.items.find(y=>y.id==x.id);if(it){it.v=false;delete it.vf}});ORD.splice(i,1);saveOrd();save();draw();liveDraw()}};
+const summ=()=>ORD.slice().reverse().map(o=>`${o.name}: ${o.items.map(i=>i.id).join(", ")} = Bs ${o.total}`).join("\n")+`\nTOTAL: Bs ${ORD.reduce((a,o)=>a+o.total,0)}`;
+$("lcp").onclick=async()=>{try{await navigator.clipboard.writeText(summ());msg("Resumen copiado.")}catch(e){msg("No se pudo copiar.",false)}};
+$("lcsv").onclick=()=>{const r=["Cliente,WhatsApp,Prendas,Total"].concat(ORD.slice().reverse().map(o=>`"${o.name}","${o.phone}","${o.items.map(i=>i.id).join(" ")}",${o.total}`)),u=URL.createObjectURL(new Blob(["\ufeff"+r.join("\n")],{type:"text/csv"})),l=document.createElement("a");l.href=u;l.download="live-"+new Date().toISOString().slice(0,10)+".csv";l.click()};
+$("lend").onclick=()=>{if(confirm("¿Cerrar el live y borrar la lista de pedidos de este celular? Las prendas siguen marcadas como vendidas.")){ORD=[];saveOrd();liveDraw()}};
 </script></body></html>
